@@ -1,0 +1,26 @@
+[
+  {
+    "career": "Data Scientist",
+    "required_skills": ["Python", "SQL", "Machine Learning", "Statistics", "Pandas", "Data Visualization"],
+    "courses": [
+      {
+        "title": "Data Science Specialization (Coursera)",
+        "link": "https://www.coursera.org/specializations/jhu-data-science"
+      },
+      {
+        "title": "Machine Learning by Andrew Ng",
+        "link": "https://www.coursera.org/learn/machine-learning"
+      }
+    ]
+  },
+  {
+    "career": "Frontend Developer",
+    "required_skills": ["HTML", "CSS", "JavaScript", "React", "APIs", "Responsive Design"],
+    "courses": [
+      {
+        "title": "Frontend Developer Path",
+        "link": "https://www.freecodecamp.org/learn"
+      }
+    ]
+  }
+]
