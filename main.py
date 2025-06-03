@@ -1,17 +1,23 @@
+import os
+import uvicorn
+from api.routes import router
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from api.routes import router
 
 app = FastAPI(title="AI Career Recommender")
 
-# Allow frontend (React) to talk to backend
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Replace "*" with your React domain in production
+    allow_origins=["*"],  # restrict to your frontend domain in prod
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Include routes
+# Include your API router
 app.include_router(router)
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8000))  # Get port from environment or default 8000
+    uvicorn.run(app, host="0.0.0.0", port=port)
