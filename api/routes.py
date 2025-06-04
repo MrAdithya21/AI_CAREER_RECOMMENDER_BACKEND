@@ -187,64 +187,47 @@ async def generate_docs(data: DocGenRequest):
     today = datetime.today().strftime("%d %B %Y")
 
     prompt = f"""
-You are an AI job application assistant. Your task is to:
-1. Extract key highlights from the resume, such as project impact, quantifiable results, tools used, certifications, and domain expertise.
-2. Use those highlights to create a professional, ATS-friendly cover letter that aligns with the job description and the company's goals.
-3. Make sure formatting is simple, clean, and keyword-optimized for Applicant Tracking Systems (ATS). Avoid decorative styling, fonts, or images.
-4. Also write a concise and polite 300-character LinkedIn message requesting a referral. Use a general default message such as:
-   "Hi, I'm excited to apply for the {data.job_title} role at {data.company_name}. With my background in {data.degree} from {data.university}, I’d really appreciate a quick chat or a referral if you’re open to it. Thank you!"
+    ... your existing prompt ...
+    """
 
-Here’s the input context you should use:
-
----
-**Resume Summary**:
-{data.resume_text}
-
-**Job Description**:
-{data.job_text}
-
-**User Details**:
-Full Name: {data.full_name}  
-Location: {data.location}  
-Phone: {data.phone}  
-Email: {data.email}  
-Degree: {data.degree}  
-University: {data.university}  
-Job Title: {data.job_title}  
-Company Name: {data.company_name}  
-Company Address: {data.company_address or '[Company Address]'}  
-Date: {today}
-
----
-Respond ONLY in the following raw JSON format:
-```json
-{{
-  "cover_letter": "<Well-structured, ATS-optimized cover letter with resume highlights>",
-  "linkedin_message": "<300 character professional referral message>"
-}}
-```
-"""
     try:
-        try:
-            model = genai.GenerativeModel("gemini-1.5-pro")
-            response = model.generate_content(prompt)
-        except Exception as e:
-            if "quota" in str(e).lower() or "429" in str(e):
-                print("⚠️ Gemini Pro quota exceeded, switching to flash...")
-                model = genai.GenerativeModel("gemini-1.5-flash")
-                response = model.generate_content(prompt)
-            else:
-                raise
-
-        raw = response.text.strip()
-        json_block = raw[raw.find("{"):raw.rfind("}") + 1]
-        parsed = json.loads(json_block)
-
-        return {
-            "cover_letter": parsed.get("cover_letter", "").strip(),
-            "linkedin_message": parsed.get("linkedin_message", "").strip()
-        }
+        print("DEBUG: Sending prompt to Gemini model (pro version)")
+        model = genai.GenerativeModel("gemini-1.5-pro")
+        response = model.generate_content(prompt)
+        print("DEBUG: Received response from Gemini (pro version):")
+        print(response.text)
 
     except Exception as e:
-        print("🔥 ERROR in /generate-docs:", str(e))
-        return JSONResponse(status_code=500, content={"error": f"Internal Server Error: {str(e)}"})
+        print(f"DEBUG: Exception from Gemini Pro: {str(e)}")
+        if "quota" in str(e).lower() or "429" in str(e):
+            print("⚠️ Gemini Pro quota exceeded, switching to flash...")
+            try:
+                model = genai.GenerativeModel("gemini-1.5-flash")
+                response = model.generate_content(prompt)
+                print("DEBUG: Received response from Gemini (flash version):")
+                print(response.text)
+            except Exception as e2:
+                print(f"🔥 ERROR Gemini Flash fallback failed: {str(e2)}")
+                return JSONResponse(status_code=500, content={"error": f"Gemini API error: {str(e2)}"})
+        else:
+            return JSONResponse(status_code=500, content={"error": f"Gemini API error: {str(e)}"})
+
+    raw = response.text.strip()
+    import re
+    json_match = re.search(r"\{.*\}", raw, re.DOTALL)
+    if not json_match:
+        print("🔥 ERROR: No JSON found in Gemini response")
+        return JSONResponse(status_code=500, content={"error": "No JSON found in Gemini response"})
+
+    try:
+        parsed = json.loads(json_match.group())
+    except Exception as e:
+        print(f"🔥 ERROR parsing JSON from Gemini response: {str(e)}")
+        print("Raw response was:")
+        print(raw)
+        return JSONResponse(status_code=500, content={"error": f"JSON parsing error: {str(e)}"})
+
+    return {
+        "cover_letter": parsed.get("cover_letter", "").strip(),
+        "linkedin_message": parsed.get("linkedin_message", "").strip()
+    }
