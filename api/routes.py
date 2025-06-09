@@ -9,6 +9,14 @@ from fastapi import APIRouter, File, UploadFile, Form, Query, Request, Body
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import google.generativeai as genai
+from fastapi import UploadFile, File, Form
+from fastapi.responses import JSONResponse
+from typing import Optional
+import re
+import tempfile
+import docx2txt
+import PyPDF2
+import io
 
 from core.recommender import extract_resume_text, extract_skills_with_llm, match_careers
 from core.skill_extractor import extract_skills_from_resume
@@ -116,10 +124,26 @@ async def career_chatbot(request: Request):
         return {"answer": f"Error: {str(e)}"}
 
 
-class CompareJobInput(BaseModel):
-    resume_text: str
-    job_text: str
-    experience: int = 0
+def extract_text_from_pdf(file_bytes: bytes) -> str:
+    text = ""
+    try:
+        reader = PyPDF2.PdfReader(io.BytesIO(file_bytes))
+        for page in reader.pages:
+            text += page.extract_text() or ""
+    except Exception as e:
+        print("PDF extraction error:", e)
+    return text
+
+def extract_text_from_docx(file_bytes: bytes) -> str:
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp:
+            tmp.write(file_bytes)
+            tmp_path = tmp.name
+        text = docx2txt.process(tmp_path)
+    except Exception as e:
+        print("DOCX extraction error:", e)
+        text = ""
+    return text
 
 def clean_and_split_skills(text):
     if isinstance(text, list):
@@ -135,37 +159,67 @@ def clean_and_split_skills(text):
         if s.strip() and s.strip().isalpha() and len(s.strip()) > 1
     ))
 
+import logging
+from fastapi import UploadFile, File, Form
+from fastapi.responses import JSONResponse
+from typing import Optional
 
 @router.post("/compare-job")
-async def compare_job(data: CompareJobInput):
-    resume_skills = set(clean_and_split_skills(extract_skills_from_resume(data.resume_text)))
-    job_skills = set(clean_and_split_skills(extract_skills_from_resume(data.job_text)))
+async def compare_job(
+    resume_file: UploadFile = File(...),
+    job_text: str = Form(...),
+    experience: Optional[int] = Form(0)
+):
+    try:
+        # Read bytes from the uploaded file
+        file_bytes = await resume_file.read()
 
-    matched = sorted(resume_skills & job_skills)
-    missing = sorted(job_skills - resume_skills)
-    total = len(job_skills)
-    score = int((len(matched) / total) * 100) if total else 0
+        # Extract text depending on file type
+        content = ""
+        if resume_file.filename.lower().endswith(".pdf"):
+            content = extract_text_from_pdf(file_bytes)
+        elif resume_file.filename.lower().endswith(".docx"):
+            content = extract_text_from_docx(file_bytes)
+        else:
+            return JSONResponse(status_code=400, content={"error": "Unsupported file format"})
 
-    exp_pattern = r"(\d+)[\s\-+]*(?:\d+)?\s*(?:years|yrs).+?(?:experience|work)"
-    matches = re.findall(exp_pattern, data.job_text.lower())
-    job_required_exp = max([int(m) for m in matches], default=0)
+        # Defensive check if content is empty after extraction
+        if not content.strip():
+            return JSONResponse(status_code=400, content={"error": "Failed to extract text from resume"})
 
-    tool_exp_pattern = r"(\d+)[\s\-+]*(?:\d+)?\s*(?:years|yrs).+?with\s+([a-zA-Z\.\+#]+)"
-    tool_experience = {
-        tool.lower(): int(years)
-        for years, tool in re.findall(tool_exp_pattern, data.job_text.lower())
-        if years.isdigit()
-    }
+        # Process skills
+        resume_skills = set(clean_and_split_skills(extract_skills_from_resume(content)))
+        job_skills = set(clean_and_split_skills(extract_skills_from_resume(job_text))) if job_text else set()
 
-    return {
-        "score": score,
-        "matched": matched,
-        "missing": missing,
-        "resume_experience": data.experience,
-        "job_required_experience": job_required_exp,
-        "experience_match": data.experience >= job_required_exp,
-        "tool_experience": tool_experience
-    }
+        matched = sorted(resume_skills & job_skills)
+        missing = sorted(job_skills - resume_skills)
+        total = len(job_skills)
+        score = int((len(matched) / total) * 100) if total else 0
+
+        exp_pattern = r"(\d+)[\s\-+]*(?:\d+)?\s*(?:years|yrs).+?(?:experience|work)"
+        matches = re.findall(exp_pattern, job_text.lower())
+        job_required_exp = max([int(m) for m in matches], default=0)
+
+        tool_exp_pattern = r"(\d+)[\s\-+]*(?:\d+)?\s*(?:years|yrs).+?with\s+([a-zA-Z\.\+#]+)"
+        tool_experience = {
+            tool.lower(): int(years)
+            for years, tool in re.findall(tool_exp_pattern, job_text.lower())
+            if years.isdigit()
+        }
+
+        return {
+            "score": score,
+            "matched": matched,
+            "missing": missing,
+            "resume_experience": experience,
+            "job_required_experience": job_required_exp,
+            "experience_match": experience >= job_required_exp,
+            "tool_experience": tool_experience
+        }
+
+    except Exception as e:
+        logging.error(f"Error processing /compare-job: {e}", exc_info=True)
+        return JSONResponse(status_code=500, content={"error": "Internal Server Error"})
 
 
 class DocGenRequest(BaseModel):

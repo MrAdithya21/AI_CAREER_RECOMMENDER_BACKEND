@@ -9,7 +9,7 @@ app = FastAPI(title="AI Career Recommender")
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # restrict to your frontend domain in prod
+    allow_origins=["*"],  # your frontend's URL
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
