@@ -1,6 +1,5 @@
-Sure! Here's the complete **README.md** content for your AI Career Recommender backend project, formatted and structured as requested:
 
-```markdown
+
 # AI Career Recommender Backend
 
 ## Overview
@@ -83,7 +82,7 @@ backend/
    ```bash
    git clone <repo-url>
    cd backend
-````
+
 
 2. **Create and activate a virtual environment:**
 
@@ -171,13 +170,7 @@ Additional dependencies may include packages for data handling, caching, securit
 
 ## Contact
 
-For questions, bug reports, or feature requests, please contact the maintainer or open an issue in the repository.
+For questions, bug reports, or feature requests, please contact aditya.singupati@gmail.com
 
 Thank you for using the AI Career Recommender backend!
 
-```
-
----
-
-If you want, I can also help generate a `.env.example` template or `requirements.txt` file content. Just let me know!
-```
